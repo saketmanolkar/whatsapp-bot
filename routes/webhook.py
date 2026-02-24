@@ -3,7 +3,8 @@ from fastapi.responses import PlainTextResponse
 
 from config import VERIFY_TOKEN
 from services.whatsapp import get_media, send_whatsapp_text
-from services.openai import chat as openai_chat, chat_with_image
+from services.openai import chat_with_image
+from services.agent import ask_agent
 
 router = APIRouter()
 
@@ -45,7 +46,7 @@ async def webhook_receive(request: Request):
 
         if msg_type == "text":
             text = (msg.get("text") or {}).get("body") or ""
-            reply_text = openai_chat(text)
+            reply_text = ask_agent(text)
             
         elif msg_type == "image":
             image_obj = msg.get("image") or {}
