@@ -1,7 +1,10 @@
+import logging
 from typing import Optional, Tuple
 
 import requests
 from config import WHATSAPP_TOKEN, PHONE_NUMBER_ID, GRAPH_VERSION
+
+logger = logging.getLogger(__name__)
 
 
 def get_media(media_id: str) -> Optional[Tuple[bytes, str]]:
@@ -37,7 +40,7 @@ def send_whatsapp_text(to: str, body: str) -> None:
     Sends a text message using WhatsApp Cloud API.
     """
     if not WHATSAPP_TOKEN or not PHONE_NUMBER_ID:
-        print("Missing WHATSAPP_TOKEN or PHONE_NUMBER_ID in .env")
+        logger.warning("Missing WHATSAPP_TOKEN or PHONE_NUMBER_ID in .env — reply not sent to WhatsApp")
         return
 
     url = f"https://graph.facebook.com/{GRAPH_VERSION}/{PHONE_NUMBER_ID}/messages"
@@ -53,4 +56,8 @@ def send_whatsapp_text(to: str, body: str) -> None:
     }
 
     resp = requests.post(url, headers=headers, json=data, timeout=20)
-    print("Send message status:", resp.status_code, resp.text)
+    if resp.ok:
+        logger.info("WhatsApp reply sent to %s", to)
+    else:
+        logger.error("WhatsApp API error: %s %s", resp.status_code, resp.text)
+        resp.raise_for_status()
