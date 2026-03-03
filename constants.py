@@ -1,0 +1,5 @@
+OPENAI_MODEL = "gpt-4o"
+WEATHER_API_URL = "http://api.weatherapi.com/v1/forecast.json"
+SPOTIFY_PLAY_API_URL = "https://api.spotify.com/v1/me/player/play"
+SPOTIFY_SEARCH_API_URL = "https://api.spotify.com/v1/search"
+SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"

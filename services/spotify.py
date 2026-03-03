@@ -7,11 +7,12 @@ from config import CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN
 from enums import MessageType
 from models.conversation import ConversationMessage
 from repositories import add_message
+from constants import SPOTIFY_PLAY_API_URL, SPOTIFY_SEARCH_API_URL, SPOTIFY_TOKEN_URL
 
 logger = logging.getLogger(__name__)
 
 def get_access_token():
-    url = "https://accounts.spotify.com/api/token"
+    url = SPOTIFY_TOKEN_URL
     auth = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
 
     data = {
@@ -30,7 +31,7 @@ def get_access_token():
 
 
 def spotify_search_track(access_token, query):
-    url = "https://api.spotify.com/v1/search"
+    url = SPOTIFY_SEARCH_API_URL
     headers = {"Authorization": f"Bearer {access_token}"}
     params = {"q": query, "type": "track", "limit": 1}
 
@@ -44,7 +45,7 @@ def spotify_search_track_info(access_token, query):
     """
     Search for a track and return first result as dict with uri, name, artists, or None.
     """
-    url = "https://api.spotify.com/v1/search"
+    url = SPOTIFY_SEARCH_API_URL
     headers = {"Authorization": f"Bearer {access_token}"}
     params = {"q": query, "type": "track", "limit": 1}
 
@@ -74,7 +75,7 @@ def _play_error_message(r) -> str:
 
 
 def spotify_play_uri(access_token, uri):
-    url = "https://api.spotify.com/v1/me/player/play"
+    url = SPOTIFY_PLAY_API_URL
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"

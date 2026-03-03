@@ -1,11 +1,17 @@
 import base64
+import json
 from typing import Optional
 from openai import OpenAI
-from enums import MessageType
-from config import CHAT_GPT_API_KEY, OPENAI_MODEL
+from enums import MessageType, OpenaiPayloadType
+from config import CHAT_GPT_API_KEY
+from constants import OPENAI_MODEL
 from models.conversation import ConversationMessage
 from repositories import add_message, get_messages
-from prompts.openai_prompts import chat_system_message, image_description_system_message
+from prompts.system_prompts import chat_system_message, image_description_system_message, weather_system_message
+from .weather import fetch_weather_for_llm
+import logging
+
+logger = logging.getLogger(__name__)
 
 _client: Optional[OpenAI] = None
 
@@ -21,9 +27,11 @@ def _get_client() -> Optional[OpenAI]:
 
 def chat(
     user_message: str,
+    payload_type: OpenaiPayloadType,
     system_message: Optional[str] = None,
     model: Optional[str] = None,
     sender: Optional[str] = None,
+    weather_place: Optional[str] = None,
 ) -> str:
     """
     Calls the OpenAI Chat Completions API and returns the assistant's reply.
@@ -35,17 +43,33 @@ def chat(
     model = model or OPENAI_MODEL
 
     messages = []
+
+    logger.info(f"Chatting with payload type: {payload_type}")
+
     if system_message:
         messages.append({"role": "system", "content": system_message})
+    elif payload_type == OpenaiPayloadType.WEATHER:
+        messages.append({"role": "system", "content": weather_system_message()})
     else:
         messages.append({"role": "system", "content": chat_system_message()})
 
-    sender_messages = get_messages(sender) if sender else []
-    for msg in reversed(sender_messages):
-        messages.append({"role": "user", "content": msg.sent_message})
-        messages.append({"role": "assistant", "content": msg.received_message})
+    if payload_type == OpenaiPayloadType.GENERAL:
+        sender_messages = get_messages(sender) if sender else []
+        for msg in reversed(sender_messages):
+            messages.append({"role": "user", "content": msg.sent_message})
+            messages.append({"role": "assistant", "content": msg.received_message})
+        messages.append({"role": "user", "content": user_message})
 
-    messages.append({"role": "user", "content": user_message})
+    if payload_type == OpenaiPayloadType.WEATHER:
+        if not weather_place or not weather_place.strip():
+            return "Please include the city or place you want the weather for, e.g. 'weather in Mumbai'."
+        try:
+            weather_payload = fetch_weather_for_llm(weather_place.strip(), days=1)
+        except Exception as e:
+            return f"Could not get weather: {e!s}"
+        weather_text = json.dumps(weather_payload, indent=2)
+        content = f"[Weather data]\n{weather_text}\n\n[User question]\n{user_message}"
+        messages.append({"role": "user", "content": content})
 
     try:
         response = client.chat.completions.create(
@@ -60,7 +84,7 @@ def chat(
             sender=sender,
             sent_message=user_message,
             received_message=content.strip(),
-            message_type=MessageType.GENERAL_TOOL,
+            message_type=MessageType.GENERAL_TOOL if payload_type == OpenaiPayloadType.GENERAL else MessageType.WEATHER_TOOL,
         )
         add_message(data)
         return content.strip()

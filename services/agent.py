@@ -1,10 +1,11 @@
 from typing import Optional
 
 import logging
-from config import CHAT_GPT_API_KEY, OPENAI_MODEL
+from config import CHAT_GPT_API_KEY
+from constants import OPENAI_MODEL
 from langchain_openai import ChatOpenAI
 from langchain.agents import Tool, AgentType, initialize_agent
-
+from enums import OpenaiPayloadType
 from .openai import chat as openai_chat 
 from .spotify import agent_play_music
 
@@ -35,7 +36,7 @@ def _get_tools() -> list[Tool]:
         a specific external API.
         """
         sender = _current_sender[0]
-        out = openai_chat(query, sender=sender)
+        out = openai_chat(query, sender=sender, payload_type=OpenaiPayloadType.GENERAL)
         _last_tool_output[0] = out
         logger.info("general_questions: stored output len=%s preview=%s", len(out), (out[:80] + "...") if len(out) > 80 else out)
         return out
@@ -50,12 +51,56 @@ def _get_tools() -> list[Tool]:
         _last_tool_output[0] = out
         return out
 
+    def get_weather(place_and_query: str) -> str:
+        """
+        Two inputs in one string: line 1 = place, line 2 = user's question.
+        LangChain passes one string; the agent must format as "place\\nquery".
+        """
+        sender = _current_sender[0]
+        raw = (place_and_query or "").strip()
+        if raw.startswith("```") and raw.endswith("```"):
+            raw = raw[3:].rstrip("`").strip()
+            if raw.startswith("\n"):
+                raw = raw[1:]
+        logger.info("get_weather: raw input len=%s repr=%r", len(raw), raw[:200] if len(raw) > 200 else raw)
+        if "\n" in raw:
+            place, user_query = raw.split("\n", 1)
+            place = place.strip()
+            user_query = user_query.strip() or "Summarize the weather for the user."
+            logger.info("get_weather: split on newline -> place=%r user_query=%r", place, user_query[:80])
+        else:
+            place = raw
+            user_query = "Summarize the weather for the user."
+            logger.info("get_weather: no newline -> place=%r (single line)", place[:80] if len(place) > 80 else place)
+        place = place.strip("`\"'").strip()
+        no_place = (
+            not place
+            or len(place) < 2
+            or place.upper() == "NO_PLACE"
+            or place.lower() in ("weather", "forecast", "temperature", "what's the weather", "whats the weather")
+            or not any(c.isalpha() for c in place)
+        )
+        logger.info("get_weather: after strip place=%r no_place=%s", place, no_place)
+        if no_place:
+            out = "Please include the city or place in your message, e.g. 'weather in Mumbai' or 'weather in London'."
+            logger.info("get_weather: returning 'please include city' (no valid place)")
+        else:
+            out = openai_chat(
+                user_query,
+                payload_type=OpenaiPayloadType.WEATHER,
+                sender=sender,
+                weather_place=place,
+            )
+            logger.info("get_weather: openai_chat returned len=%s", len(out or ""))
+        _last_tool_output[0] = out
+        return out
+
     tools = [
         Tool(
             name="general_questions",
             func=general_questions,
             description=(
-                "MANDATORY: You MUST call this tool for every user message unless they ask to play a song. "
+                "MANDATORY: You MUST call this tool for every user message unless they ask to play a song or ask about weather. "
                 "Do NOT respond without calling a tool. Use general_questions for: thanks, hi, bye, okay, "
                 "any question, listing past messages, summarizing the conversation, chitchat, advice, "
                 "or any other text. This tool has conversation history. Input = the user's message exactly."
@@ -68,6 +113,15 @@ def _get_tools() -> list[Tool]:
                 "Use ONLY when the user explicitly wants to play a song or music on Spotify (e.g. 'play X', 'play me X'). "
                 "Input must be the song name only, e.g. 'Holiday' or 'Holiday by Green Day'. "
                 "Do not include words like 'play' or 'play me'—extract just the song (and optionally artist)."
+            ),
+        ),
+        Tool(
+            name="get_weather",
+            func=get_weather,
+            description=(
+                "Use when the user asks about weather. Input must be exactly two lines separated by a newline: "
+                "Line 1 = city/place only (e.g. Mumbai, London). Line 2 = the user's question (e.g. would there be precipitation in Mumbai?). "
+                "Extract the place and the question from the user's message. If no place was given, put NO_PLACE on line 1."
             ),
         ),
     ]
@@ -93,8 +147,9 @@ def get_agent():
             agent_kwargs={
                 "prefix": (
                     "You must always use one of the tools. Never give a final answer without calling a tool first. "
-                    "For any user message (thanks, hi, bye, questions, list messages, etc.) use the general_questions tool. "
-                    "Only use play_music when the user clearly asks to play a song on Spotify.\n\n"
+                    "Use get_weather when the user asks about weather (give the full message or place as input). "
+                    "Use play_music only when the user clearly asks to play a song on Spotify. "
+                    "Use general_questions for thanks, hi, bye, list messages, or other questions.\n\n"
                 ),
             },
             agent_executor_kwargs={

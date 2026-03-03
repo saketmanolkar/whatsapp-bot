@@ -25,6 +25,14 @@ def chat_system_message() -> str:
     - Do not fabricate facts, statistics, names, or sources
     """
 
+def weather_system_message() -> str:
+    return """
+    You are a weather assistant. You will receive weather data under [Weather data] and a question under [User question].
+    Use ONLY the provided weather data to answer. Be concise and friendly. Do not make up temperatures or conditions.
+    Always mention the date and local time from the data in your response.
+    """
+
+
 def image_description_system_message() -> str:
     return """
     You are a sharp-eyed visual assistant that describes images clearly and accurately.

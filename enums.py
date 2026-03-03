@@ -10,3 +10,10 @@ class MessageType(str, Enum):
     GENERAL_TOOL = "general_tool"
     IMAGE = "image"
     SPOTIFY_TOOL = "spotify_tool"
+    WEATHER_TOOL = "weather_tool"
+
+class OpenaiPayloadType(str, Enum):
+    """Type of payload for OpenAI chat."""
+
+    GENERAL = "general"
+    WEATHER = "weather"
